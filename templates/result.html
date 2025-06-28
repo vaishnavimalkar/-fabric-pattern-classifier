@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pattern Sense - Result</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>PATTERN SENSE</h1>
+        <nav>
+            <a href="#">HOME</a>
+            <a href="#">ABOUT</a>
+            <a href="#">CONTACT</a>
+            <a href="#">GET STARTED</a>
+        </nav>
+    </header>
+
+    <main>
+        <h2>Image Classification</h2>
+        <img src="{{ img_path }}" alt="Uploaded Image" style="width:300px;"><br><br>
+        <p>The Pattern is : <em>{{ prediction }}</em></p><br>
+        <a href="/"> <button>Try with another image!</button> </a>
+    </main>
+</body>
+</html>
+
