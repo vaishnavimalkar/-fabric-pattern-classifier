@@ -1,56 +1,55 @@
 from flask import Flask, render_template, request
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
-from tensorflow.keras.preprocessing import image
-import numpy as np
 import os
-
+import torch
+import torch.nn as nn
+from torchvision import transforms, models
+from PIL import Image
+import numpy as np
+from datetime import datetime
 app = Flask(__name__)
-
-# ✅ Adjusted model architecture to match saved weights (Flatten output = 57600)
-model = Sequential([
-    Conv2D(32, (3, 3), activation='relu', input_shape=(120, 120, 3)),
-    MaxPooling2D((2, 2)),
-    Conv2D(64, (3, 3), activation='relu'),
-    MaxPooling2D((2, 2)),
-    Flatten(),  # Output should now match what saved weights expect
-    Dense(64, activation='relu'),
-    Dense(10, activation='softmax')  # Ensure you trained on 10 classes
+UPLOAD_FOLDER = 'static/uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+class_names = np.load("classes.npy")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = models.resnet18(weights=None)
+model.fc = nn.Sequential(
+    nn.Linear(model.fc.in_features, 128),
+    nn.ReLU(),
+    nn.Dropout(0.3),
+    nn.Linear(128, len(class_names))
+)
+model.load_state_dict(torch.load("fabric_pattern_model.pt", map_location=device))
+model.to(device)
+model.eval()
+transform = transforms.Compose([
+    transforms.Resize((180, 180)),
+    transforms.ToTensor()
 ])
-
-# ✅ Load the trained weights
-model.load_weights('model_cnn.h5')
-
-# ✅ Update with your actual class labels
-class_names = ['Chevron', 'Dots', 'Floral', 'Geometric', 'Houndstooth', 'Paisley', 'Striped', 'Plaid', 'Polka', 'Solid']
-
-@app.route('/')
+@app.route("/")
 def home():
-    return render_template('home.html')
-
-@app.route('/predict', methods=['POST'])
+    return render_template("home.html")
+@app.route("/app")
+def app_page():
+    return render_template("app.html", prediction=None, image_path=None)
+@app.route("/predict", methods=["POST"])
 def predict():
-    if 'file' not in request.files:
-        return 'No file uploaded', 400
+    file = request.files["file"]
+    if file and file.filename != "":
+        filename = datetime.now().strftime("%Y%m%d%H%M%S_") + file.filename
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(filepath)
 
-    file = request.files['file']
-    if file.filename == '':
-        return 'No selected file', 400
+        image = Image.open(filepath).convert("RGB")
+        image_tensor = transform(image).unsqueeze(0).to(device)
 
-    # Save file
-    file_path = os.path.join('static', file.filename)
-    file.save(file_path)
+        with torch.no_grad():
+            output = model(image_tensor)
+            _, predicted = torch.max(output, 1)
+            prediction = class_names[predicted.item()]
 
-    # ✅ Resize image to new input shape
-    img = image.load_img(file_path, target_size=(120, 120))
-    img_array = image.img_to_array(img) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)
+        return render_template("app.html", prediction=prediction, image_path=filepath)
 
-    # Predict
-    prediction = model.predict(img_array)
-    predicted_class = class_names[np.argmax(prediction)]
+    return render_template("app.html", prediction="No file selected", image_path=None)
 
-    return render_template('result.html', prediction=predicted_class, img_path=file_path)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
